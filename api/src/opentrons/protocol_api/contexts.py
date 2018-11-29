@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import time
 from typing import Any, Dict, List, Optional, Union, Tuple
 
 from .labware import Well, Labware, load, load_module, ModuleGeometry
-from opentrons import types, hardware_control as hc
+from opentrons import types, hardware_control as hc, broker, commands as cmds
 import opentrons.config.robot_configs as rc
 from opentrons.hardware_control import adapters, modules
 from . import geometry
@@ -47,6 +48,29 @@ class ProtocolContext:
         self._location_cache: Optional[types.Location] = None
         self._hardware = self._build_hardware_adapter(self._loop)
         self._log = MODULE_LOG.getChild(self.__class__.__name__)
+        self._commands = []
+        self._unsubscribe_commands = None
+        self.clear_commands()
+
+    def commands(self):
+        return self._commands
+
+    def clear_commands(self):
+        self._commands.clear()
+        if self._unsubscribe_commands:
+            self._unsubscribe_commands()
+
+        def on_command(message):
+            payload = message.get('payload')
+            text = payload.get('text')
+            if text is None:
+                return
+
+            if message['$'] == 'before':
+                self._commands.append(text.format(**payload))
+
+        self._unsubscribe_commands = broker.subscribe(
+            cmds.types.COMMAND, on_command)
 
     def connect(self, hardware: hc.API):
         """ Connect to a running hardware API.
@@ -194,22 +218,42 @@ class ProtocolContext:
         """
         raise NotImplementedError
 
-    def pause(self):
+    @cmds.publish.both(command=cmds.pause)
+    def pause(self, msg):
         """ Pause execution of the protocol until resume is called.
 
-        Note: This function call will not return until the protocol
-        is resumed (presumably by a user in the run app).
+        This function returns immediately, but the next function call that
+        is blocked by a paused robot (anything that involves moving) will
+        not return until :py:meth:`resume` is called.
+
+        :param str msg: A message to echo back to connected clients.
         """
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.resume)
     def resume(self):
-        """ Resume a previously-paused protocol. """
+        """ Resume a previously-paused protocol """
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.comment)
     def comment(self, msg):
         """ Add a user-readable comment string that will be echoed to the
         Opentrons app. """
-        raise NotImplementedError
+        pass
+
+    @cmds.publish.both(command=cmds.delay)
+    def delay(self, seconds=0, minutes=0):
+        """ Delay protocol execution for a specific amount of time.
+
+        :param float seconds: A time to delay in seconds
+        :param float minutes: A time to delay in minutes
+
+        If both `seconds` and `minutes` are specified, they will be added.
+        """
+        delay_time = seconds + minutes*60
+        self.pause()
+        time.sleep(delay_time)
+        self.resume()
 
     @property
     def config(self) -> rc.robot_config:
@@ -332,19 +376,27 @@ class InstrumentContext:
                         .format(volume,
                                 location if location else 'current position',
                                 rate))
+
         if isinstance(location, Well):
             point, well = location.bottom()
-            self.move_to(
-                types.Location(point + types.Point(0, 0,
-                                                   self.well_bottom_clearance),
-                               well))
+            loc = types.Location(
+                point + types.Point(0, 0, self.well_bottom_clearance),
+                well)
+            self.move_to(loc)
         elif isinstance(location, types.Location):
+            loc = location
             self.move_to(location)
         elif location is not None:
             raise TypeError(
                 'location should be a Well or Location, but it is {}'
                 .format(location))
+        else:
+            loc = self._ctx.location_cache
+        cmds.do_publish(cmds.aspirate, self.aspirate, 'before', None, None,
+                        self, volume, loc, rate)
         self._hardware.aspirate(self._mount, volume, rate)
+        cmds.do_publish(cmds.aspirate, self.aspirate, 'after', self, None,
+                        self, volume, loc, rate)
         return self
 
     def dispense(self,
@@ -385,19 +437,27 @@ class InstrumentContext:
                                 rate))
         if isinstance(location, Well):
             point, well = location.bottom()
-            self.move_to(
-                types.Location(point + types.Point(0, 0,
-                                                   self.well_bottom_clearance),
-                               well))
+            loc = types.Location(
+                point + types.Point(0, 0, self.well_bottom_clearance),
+                well)
+            self.move_to(loc)
         elif isinstance(location, types.Location):
+            loc = location
             self.move_to(location)
         elif location is not None:
             raise TypeError(
                 'location should be a Well or Location, but it is {}'
                 .format(location))
+        else:
+            loc = self._ctx.location_cache
+        cmds.do_publish(cmds.dispense, self.dispense, 'before', None, None,
+                        self, volume, loc, rate)
         self._hardware.dispense(self._mount, volume, rate)
+        cmds.do_publish(cmds.dispense, self.dispense, 'after', self, None,
+                        self, volume, loc, rate)
         return self
 
+    @cmds.publish.both(command=cmds.mix)
     def mix(self,
             repetitions: int = 1,
             volume: float = None,
@@ -405,6 +465,7 @@ class InstrumentContext:
             rate: float = 1.0) -> 'InstrumentContext':
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.blow_out)
     def blow_out(self, location: Well = None) -> 'InstrumentContext':
         """
         Blow liquid out of the tip.
@@ -414,6 +475,7 @@ class InstrumentContext:
         """
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.touch_tip)
     def touch_tip(self,
                   location: Well = None,
                   radius: float = 1.0,
@@ -421,14 +483,17 @@ class InstrumentContext:
                   speed: float = 60.0) -> 'InstrumentContext':
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.air_gap)
     def air_gap(self,
                 volume: float = None,
                 height: float = None) -> 'InstrumentContext':
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.return_tip)
     def return_tip(self) -> 'InstrumentContext':
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.pick_up_tip)
     def pick_up_tip(self, location: types.Location = None,
                     presses: int = 3,
                     increment: float = 1.0) -> 'InstrumentContext':
@@ -492,6 +557,7 @@ class InstrumentContext:
 
         return self
 
+    @cmds.publish.both(command=cmds.drop_tip)
     def drop_tip(self, location: types.Location = None) -> 'InstrumentContext':
         """
         Drop the current tip.
@@ -526,7 +592,12 @@ class InstrumentContext:
 
         :returns: This instance.
         """
+        def home_dummy(mount): pass
+        cmds.do_publish(cmds.home, home_dummy, 'before', None, None,
+                        self._mount.name.lower())
         self._ctx.home()
+        cmds.do_publish(cmds.home, home_dummy, 'after', self, None,
+                        self._mount.name.lower())
         return self
 
     def home_plunger(self) -> 'InstrumentContext':
@@ -537,6 +608,7 @@ class InstrumentContext:
         self._hardware.home_plunger(self.mount)
         return self
 
+    @cmds.publish.both(command=cmds.distribute)
     def distribute(self,
                    volume: float,
                    source: Well,
@@ -544,6 +616,7 @@ class InstrumentContext:
                    *args, **kwargs) -> 'InstrumentContext':
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.consolidate)
     def consolidate(self,
                     volume: float,
                     source: Well,
@@ -551,12 +624,16 @@ class InstrumentContext:
                     *args, **kwargs) -> 'InstrumentContext':
         raise NotImplementedError
 
+    @cmds.publish.both(command=cmds.transfer)
     def transfer(self,
                  volume: float,
                  source: Well,
                  dest: Well,
                  **kwargs) -> 'InstrumentContext':
         raise NotImplementedError
+
+    def delay(self):
+        return self._ctx.delay()
 
     def move_to(self, location: types.Location) -> 'InstrumentContext':
         """ Move the instrument.
@@ -806,6 +883,7 @@ class TemperatureModuleContext(ModuleContext):
         self._loop = loop
         super().__init__(ctx, geometry)
 
+    @cmds.publish.both(command=cmds.tempdeck_set_temp)
     def set_temperature(self, celsius: float):
         """ Set the target temperature, in C.
 
@@ -815,6 +893,7 @@ class TemperatureModuleContext(ModuleContext):
         """
         return self._module.set_temperature(celsius)
 
+    @cmds.publish.both(command=cmds.tempdeck_deactivate)
     def deactivate(self):
         """ Stop heating (or cooling) and turn off the fan.
         """
@@ -851,6 +930,7 @@ class MagneticModuleContext(ModuleContext):
         self._loop = loop
         super().__init__(ctx, geometry)
 
+    @cmds.publish.both(command=cmds.magdeck_calibrate)
     def calibrate(self):
         """ Calibrate the Magnetic Module.
 
@@ -870,6 +950,7 @@ class MagneticModuleContext(ModuleContext):
                 " calling engage().")
         return super().load_labware(labware)
 
+    @cmds.publish.both(command=cmds.magdeck_engage)
     def engage(self, height: float = None, offset: float = None):
         """ Raise the Magnetic Module's magnets.
 
@@ -907,6 +988,7 @@ class MagneticModuleContext(ModuleContext):
                 .format(self.labware))
         self._module.engage(dist)
 
+    @cmds.publish.both(command=cmds.magdeck_disengage)
     def disengage(self):
         """ Lower the magnets back into the Magnetic Module.
         """
