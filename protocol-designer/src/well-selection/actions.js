@@ -7,8 +7,8 @@ import {selectors as steplistSelectors} from '../steplist'
 import {selectors as pipetteSelectors} from '../pipettes'
 import {selectors as labwareIngredSelectors} from '../labware-ingred/reducers'
 
-import type {StepFieldName} from '../steplist/fieldLevel'
 import type {ThunkDispatch, GetState} from '../types'
+import type {StepFieldName} from '../form-types'
 import type {Wells} from '../labware-ingred/types'
 import type {Channels} from '@opentrons/components'
 
@@ -59,7 +59,7 @@ export const openWellSelectionModal = (payload: OpenWellSelectionModalPayload) =
   (dispatch: ThunkDispatch<*>, getState: GetState) => {
     const state = getState()
     const accessor = payload.formFieldAccessor
-    const formData = steplistSelectors.formData(state)
+    const formData = steplistSelectors.getUnsavedForm(state)
 
     const wells: Wells = (accessor && formData && formData[accessor] &&
       _wellArrayToObj(formData[accessor])) || {}
@@ -67,8 +67,8 @@ export const openWellSelectionModal = (payload: OpenWellSelectionModalPayload) =
     // initially selected wells in form get selected in state before modal opens
     dispatch(selectWells(wells))
 
-    const pipettes = pipetteSelectors.equippedPipettes(state)
-    const labware = labwareIngredSelectors.getLabware(state)
+    const pipettes = pipetteSelectors.getEquippedPipettes(state)
+    const labware = labwareIngredSelectors.getLabwareById(state)
     // TODO type this action, make an underline fn action creator
 
     dispatch({
@@ -89,13 +89,13 @@ export const closeWellSelectionModal = (): * => ({
 export const saveWellSelectionModal = () =>
   (dispatch: ThunkDispatch<*>, getState: GetState) => {
     const state = getState()
-    const wellSelectionModalData = selectors.wellSelectionModalData(state)
+    const wellSelectionModalData = selectors.getWellSelectionModalData(state)
 
     // this if-else is mostly for Flow
     if (wellSelectionModalData) {
       dispatch(changeFormInput({
         update: {
-          [wellSelectionModalData.formFieldAccessor]: selectors.selectedWellNames(state),
+          [wellSelectionModalData.formFieldAccessor]: selectors.getSelectedWellNames(state),
         },
       }))
     } else {

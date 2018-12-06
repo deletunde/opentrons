@@ -3,10 +3,11 @@ import {createSelector} from 'reselect'
 import mapValues from 'lodash/mapValues'
 import {getPropertyAllPipettes} from '@opentrons/shared-data'
 import {getFileMetadata} from './fileFields'
-import {getInitialRobotState, robotStateTimeline} from './commands'
+import {getInitialRobotState, getRobotStateTimeline} from './commands'
 import {selectors as dismissSelectors} from '../../dismiss'
 import {selectors as ingredSelectors} from '../../labware-ingred/reducers'
 import {selectors as steplistSelectors} from '../../steplist'
+import {selectors as pipetteSelectors} from '../../pipettes'
 import {
   DEFAULT_MM_FROM_BOTTOM_ASPIRATE,
   DEFAULT_MM_FROM_BOTTOM_DISPENSE,
@@ -36,21 +37,23 @@ const executionDefaults = {
 export const createFile: BaseState => ProtocolFile = createSelector(
   getFileMetadata,
   getInitialRobotState,
-  robotStateTimeline,
+  getRobotStateTimeline,
   dismissSelectors.getAllDismissedWarnings,
   ingredSelectors.getLiquidGroupsById,
-  ingredSelectors.getIngredientLocations,
+  ingredSelectors.getLiquidsByLabwareId,
   steplistSelectors.getSavedForms,
-  steplistSelectors.orderedSteps,
+  steplistSelectors.getOrderedSteps,
+  pipetteSelectors.getEquippedPipettes,
   (
     fileMetadata,
     initialRobotState,
-    _robotStateTimeline,
+    robotStateTimeline,
     dismissedWarnings,
     ingredients,
     ingredLocations,
     savedStepForms,
-    orderedSteps
+    orderedSteps,
+    equippedPipettes,
   ) => {
     const {author, description, created} = fileMetadata
     const name = fileMetadata['protocol-name'] || 'untitled'
@@ -106,7 +109,7 @@ export const createFile: BaseState => ProtocolFile = createSelector(
         _internalAppBuildDate,
         data: {
           pipetteTiprackAssignments: mapValues(
-            initialRobotState.instruments,
+            equippedPipettes,
             (p: PipetteData): ?string => p.tiprackModel
           ),
           dismissedWarnings,
@@ -124,7 +127,7 @@ export const createFile: BaseState => ProtocolFile = createSelector(
       pipettes: instruments,
       labware,
 
-      procedure: _robotStateTimeline.timeline.map((timelineItem, i) => ({
+      procedure: robotStateTimeline.timeline.map((timelineItem, i) => ({
         annotation: {
           name: `TODO Name ${i}`,
           description: 'todo description',

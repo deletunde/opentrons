@@ -4,9 +4,10 @@ import WellSelectionInput from './WellSelectionInput'
 import {connect} from 'react-redux'
 import {selectors as pipetteSelectors} from '../../../pipettes'
 import {selectors as steplistSelectors} from '../../../steplist'
-import {getFieldErrors, type StepFieldName} from '../../../steplist/fieldLevel'
-import type {BaseState, ThunkDispatch} from '../../../types'
+import {getFieldErrors} from '../../../steplist/fieldLevel'
 import {showFieldErrors} from '../StepFormField'
+import type {BaseState, ThunkDispatch} from '../../../types'
+import type {StepFieldName} from '../../../form-types'
 import type {FocusHandlers} from '../index'
 
 type Props = React.ElementProps<typeof WellSelectionInput>
@@ -33,7 +34,7 @@ const mapStateToProps = (state: BaseState, ownProps: OP): SP => {
   const formData = steplistSelectors.getUnsavedForm(state)
   const pipetteId = formData && formData[ownProps.pipetteFieldName]
   const selectedWells = formData ? formData[ownProps.name] : []
-  const pipetteData = pipetteId && pipetteSelectors.pipettesById(state)[pipetteId]
+  const pipetteData = pipetteId && pipetteSelectors.getPipettesById(state)[pipetteId]
   const isMulti = pipetteData && (pipetteData.channels > 1)
 
   return {

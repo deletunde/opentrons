@@ -6,8 +6,7 @@ import without from 'lodash/without'
 import cx from 'classnames'
 
 import {actions, selectors} from '../../steplist'
-import type {StepFieldName} from '../../steplist/fieldLevel'
-import type {FormData, StepType} from '../../form-types'
+import type {FormData, StepType, StepFieldName, StepIdType} from '../../form-types'
 import type {BaseState, ThunkDispatch} from '../../types'
 import formStyles from '../forms.css'
 import styles from './StepEditForm.css'
@@ -38,7 +37,7 @@ type SP = {
   formData?: ?FormData,
   isNewStep?: boolean,
 }
-type DP = { deleteStep: () => mixed }
+type DP = { deleteStep: (StepIdType) => mixed }
 
 type StepEditFormState = {
   showConfirmDeleteModal: boolean,
@@ -102,7 +101,7 @@ class StepEditForm extends React.Component<Props, StepEditFormState> {
           onCancelClick={this.toggleConfirmDeleteModal}
           onContinueClick={() => {
             this.toggleConfirmDeleteModal()
-            deleteStep()
+            this.props.formData && deleteStep(this.props.formData.id)
           }}
         />}
         <div className={cx(formStyles.form, styles[formData.stepType])}>
@@ -123,12 +122,12 @@ class StepEditForm extends React.Component<Props, StepEditFormState> {
 }
 
 const mapStateToProps = (state: BaseState): SP => ({
-  formData: selectors.formData(state),
-  isNewStep: selectors.isNewStepForm(state),
+  formData: selectors.getUnsavedForm(state),
+  isNewStep: selectors.getIsNewStepForm(state),
 })
 
 const mapDispatchToProps = (dispatch: ThunkDispatch<*>): DP => ({
-  deleteStep: () => dispatch(actions.deleteStep()),
+  deleteStep: (stepId: StepIdType) => dispatch(actions.deleteStep(stepId)),
 })
 
 export default connect(mapStateToProps, mapDispatchToProps)(StepEditForm)

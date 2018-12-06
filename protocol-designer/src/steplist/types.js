@@ -1,9 +1,14 @@
 // @flow
 import type {PauseFormData, CommandCreatorData} from '../step-generation'
-import type {FormData, StepIdType, StepType, TransferLikeStepType} from '../form-types'
+import type {
+  FormData,
+  StepIdType,
+  StepFieldName,
+  StepType,
+  TransferLikeStepType,
+} from '../form-types'
 import type {BaseState} from '../types'
 import type {FormError} from './formLevel/errors'
-import type {StepFieldName} from './fieldLevel'
 
 // sections of the form that are expandable/collapsible
 export type FormSectionState = {aspirate: boolean, dispense: boolean}
@@ -15,8 +20,8 @@ export const END_TERMINAL_ITEM_ID: '__end__' = '__end__'
 export type TerminalItemId = typeof START_TERMINAL_ITEM_ID | typeof END_TERMINAL_ITEM_ID
 
 export type WellIngredientNames = {[ingredId: string]: string}
-
 export type WellIngredientVolumeData = {[ingredId: string]: {volume: number}}
+export type TipLocation = {labware: string, well: string}
 
 export type SubstepIdentifier = {|
   stepId: StepIdType,
@@ -36,6 +41,7 @@ export type SourceDestData = {
 
 export type SubstepTimelineFrame = {
   substepIndex?: number,
+  activeTips: ?TipLocation,
   source?: SourceDestData,
   dest?: SourceDestData,
   volume?: ?number,
@@ -49,6 +55,7 @@ export type SubstepWellData = {
 }
 
 export type StepItemSourceDestRow = {
+  activeTips: ?TipLocation,
   substepIndex?: number,
   source?: SubstepWellData,
   dest?: SubstepWellData,

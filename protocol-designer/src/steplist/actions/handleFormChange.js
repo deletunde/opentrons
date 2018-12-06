@@ -1,17 +1,14 @@
 // @flow
 import uniq from 'lodash/uniq'
+import {getPipetteNameSpecs} from '@opentrons/shared-data'
 import {getWellSetForMultichannel} from '../../well-selection/utils'
-import {selectors} from '../index'
 import {selectors as pipetteSelectors} from '../../pipettes'
-import {
-  DEFAULT_MM_FROM_BOTTOM_ASPIRATE,
-  DEFAULT_MM_FROM_BOTTOM_DISPENSE,
-} from '../../constants'
 import {selectors as labwareIngredSelectors} from '../../labware-ingred/reducers'
+
 import type {PipetteChannels} from '@opentrons/shared-data'
 import type {BaseState, GetState} from '../../types'
 import type {FormData} from '../../form-types'
-
+import type {StepFieldName} from '../fieldLevel'
 import type {ChangeFormPayload} from './types'
 
 function _getAllWells (
@@ -38,7 +35,7 @@ function _getAllWells (
 // maybe remove channels from pipette state and use shared-data?
 // or if not, make this its own selector in pipettes/ atom
 const getChannels = (pipetteId: string, state: BaseState): PipetteChannels => {
-  const pipettes = pipetteSelectors.pipettesById(state)
+  const pipettes = pipetteSelectors.getPipettesById(state)
   const pipette = pipettes[pipetteId]
   if (!pipette) {
     console.error(`${pipetteId} not found in pipettes, cannot handleFormChange properly`)
@@ -51,47 +48,20 @@ const getChannels = (pipetteId: string, state: BaseState): PipetteChannels => {
 // Eventually we gotta allow arbitrary actions like DELETE_LABWARE
 // (or more speculatively, CHANGE_PIPETTE etc), which affect saved forms from
 // 'outside', to cause changes that run thru all the logic in this block
-function handleFormChange (payload: ChangeFormPayload, getState: GetState): ChangeFormPayload {
+function handleFormChange (
+  payload: ChangeFormPayload,
+  baseForm: ?FormData,
+  getState: GetState,
+): ChangeFormPayload {
   // Use state to handle form changes
   const baseState = getState()
-  const unsavedForm = selectors.formData(baseState)
-  let updateOverrides = {}
 
-  if (unsavedForm == null) {
-    // pass thru, unchanged
-    return payload
-  }
+  // pass thru, unchanged
+  if (baseForm == null) { return payload }
 
-  // Changing labware clears wells selection: source labware
-  if ('aspirate_labware' in payload.update) {
-    updateOverrides = {
-      ...updateOverrides,
-      'aspirate_wells': null,
-      'aspirate_mmFromBottom': DEFAULT_MM_FROM_BOTTOM_ASPIRATE,
-    }
-  }
+  let updateOverrides = getChangeLabwareEffects(payload.update)
 
-  // Changing labware clears wells selection: dest labware
-  if ('dispense_labware' in payload.update) {
-    updateOverrides = {
-      ...updateOverrides,
-      'dispense_wells': null,
-      'dispense_mmFromBottom': DEFAULT_MM_FROM_BOTTOM_DISPENSE,
-    }
-  }
-
-  // Changing labware clears wells selection: labware (eg, mix)
-  if ('labware' in payload.update) {
-    updateOverrides = {
-      ...updateOverrides,
-      'wells': null,
-      // TODO: Ian 2018-09-03 should we have both asp/disp for Mix?
-      // if not, is dispense the right choice vs aspirate?
-      'dispense_mmFromBottom': DEFAULT_MM_FROM_BOTTOM_DISPENSE,
-    }
-  }
-
-  if (unsavedForm.pipette && payload.update.pipette) {
+  if (baseForm.pipette && payload.update.pipette) {
     if (typeof payload.update.pipette !== 'string') {
       // this should not happen!
       console.error('no next pipette, could not handleFormChange')
@@ -100,7 +70,23 @@ function handleFormChange (payload: ChangeFormPayload, getState: GetState): Chan
     const nextChannels = getChannels(payload.update.pipette, baseState)
     updateOverrides = {
       ...updateOverrides,
-      ...reconcileFormPipette(unsavedForm, baseState, payload.update.pipette, nextChannels),
+      ...reconcileFormPipette(baseForm, baseState, payload.update.pipette, nextChannels),
+    }
+  }
+
+  if (baseForm.stepType === 'distribute') {
+    if (typeof payload.update.pipette === 'string') {
+      const pipetteData = pipetteSelectors.getPipettesById(baseState)[payload.update.pipette]
+      const pipetteSpecs = getPipetteNameSpecs(pipetteData.model)
+      const disposalVol = pipetteSpecs
+        ? pipetteSpecs.minVolume
+        : null
+
+      updateOverrides = {
+        ...updateOverrides,
+        'aspirate_disposalVol_checkbox': true,
+        'aspirate_disposalVol_volume': disposalVol,
+      }
     }
   }
 
@@ -110,6 +96,38 @@ function handleFormChange (payload: ChangeFormPayload, getState: GetState): Chan
       ...updateOverrides,
     },
   }
+}
+
+export const getChangeLabwareEffects = (updateFormData: {[StepFieldName]: ?mixed}) => {
+  let updateOverrides = {}
+  // Changing labware clears wells selection: source labware
+  if ('aspirate_labware' in updateFormData) {
+    updateOverrides = {
+      ...updateOverrides,
+      'aspirate_wells': null,
+      'aspirate_mmFromBottom': null,
+      'aspirate_touchTipMmFromBottom': null,
+    }
+  }
+  // Changing labware clears wells selection: dest labware
+  if ('dispense_labware' in updateFormData) {
+    updateOverrides = {
+      ...updateOverrides,
+      'dispense_wells': null,
+      'dispense_mmFromBottom': null,
+      'dispense_touchTipMmFromBottom': null,
+    }
+  }
+  // Changing labware clears wells selection: labware (eg, mix)
+  if ('labware' in updateFormData) {
+    updateOverrides = {
+      ...updateOverrides,
+      'wells': null,
+      'mix_mmFromBottom': null,
+      'mix_touchTipMmFromBottom': null,
+    }
+  }
+  return updateOverrides
 }
 
 export const reconcileFormPipette = (formData: FormData, baseState: BaseState, nextPipetteId: ?mixed, nextChannels: ?number) => {
@@ -156,7 +174,7 @@ export const reconcileFormPipette = (formData: FormData, baseState: BaseState, n
     } else if (multiToSingle) {
       // multi-channel to single-channel: convert primary wells to all wells
       const labwareId = formData.labware
-      const labware = labwareId && labwareIngredSelectors.getLabware(baseState)[labwareId]
+      const labware = labwareId && labwareIngredSelectors.getLabwareById(baseState)[labwareId]
       const labwareType = labware && labware.type
 
       updateOverrides = {
@@ -173,9 +191,9 @@ export const reconcileFormPipette = (formData: FormData, baseState: BaseState, n
       const sourceLabwareId = formData['aspirate_labware']
       const destLabwareId = formData['dispense_labware']
 
-      const sourceLabware = sourceLabwareId && labwareIngredSelectors.getLabware(baseState)[sourceLabwareId]
+      const sourceLabware = sourceLabwareId && labwareIngredSelectors.getLabwareById(baseState)[sourceLabwareId]
       const sourceLabwareType = sourceLabware && sourceLabware.type
-      const destLabware = destLabwareId && labwareIngredSelectors.getLabware(baseState)[destLabwareId]
+      const destLabware = destLabwareId && labwareIngredSelectors.getLabwareById(baseState)[destLabwareId]
       const destLabwareType = destLabware && destLabware.type
 
       updateOverrides = {
@@ -185,6 +203,7 @@ export const reconcileFormPipette = (formData: FormData, baseState: BaseState, n
       }
     }
   }
+
   return updateOverrides
 }
 

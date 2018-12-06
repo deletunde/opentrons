@@ -58,7 +58,7 @@ function mapStateToProps (state: BaseState, ownProps: OP): SP {
   const containerId = container && container.id
   const containerName = containerId && labwareNames[containerId]
 
-  const selectedContainer = selectors.getSelectedContainer(state)
+  const selectedContainer = selectors.getSelectedLabware(state)
   const isSelectedSlot = !!(selectedContainer && selectedContainer.slot === slot)
 
   const selectedTerminalItem = steplistSelectors.getSelectedTerminalItemId(state)
@@ -66,11 +66,10 @@ function mapStateToProps (state: BaseState, ownProps: OP): SP {
   const isTiprack = getIsTiprack(containerType)
   const showNameOverlay = container && !isTiprack && !labwareHasName
 
-  const slotToMoveFrom = selectors.slotToMoveFrom(state)
-  const activeModals = selectors.activeModals(state)
+  const slotToMoveFrom = selectors.getSlotToMoveFrom(state)
 
   const slotHasLabware = !!containerType
-  const addLabwareMode = activeModals.labwareSelection
+  const addLabwareMode = selectors.getLabwareSelectionMode(state)
   const moveLabwareMode = Boolean(slotToMoveFrom)
 
   const setDefaultLabwareName = () => renameLabware({
@@ -102,7 +101,7 @@ function mapStateToProps (state: BaseState, ownProps: OP): SP {
     // or when targeted by an open "Add Labware" modal
       ? (isSelectedSlot || selectors.selectedAddLabwareSlot(state) === slot)
     // outside of deckSetupMode, labware is highlighted when step/substep is hovered
-      : steplistSelectors.hoveredStepLabware(state).includes(containerId),
+      : steplistSelectors.getHoveredStepLabware(state).includes(containerId),
     selectedTerminalItem,
 
     slot,

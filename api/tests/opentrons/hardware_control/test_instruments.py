@@ -24,17 +24,19 @@ def dummy_instruments():
     return dummy_instruments_attached
 
 
-async def test_cache_instruments(dummy_instruments, loop):
-    expected_keys = [
-        'name', 'min_volume', 'max_volume', 'aspirate_flow_rate', 'channels',
-        'dispense_flow_rate', 'pipette_id', 'current_volume', 'display_name']
+instrument_keys = sorted([
+    'name', 'min_volume', 'max_volume', 'aspirate_flow_rate', 'channels',
+    'dispense_flow_rate', 'pipette_id', 'current_volume', 'display_name',
+    'tip_length'])
 
+
+async def test_cache_instruments(dummy_instruments, loop):
     hw_api = hc.API.build_hardware_simulator(
         attached_instruments=dummy_instruments,
         loop=loop)
     await hw_api.cache_instruments()
     assert sorted(hw_api.attached_instruments[types.Mount.LEFT].keys()) == \
-        sorted(expected_keys)
+        instrument_keys
 
 
 @pytest.mark.skipif(not hc.Controller,
@@ -43,11 +45,7 @@ async def test_cache_instruments(dummy_instruments, loop):
 async def test_cache_instruments_hc(monkeypatch, dummy_instruments,
                                     hardware_controller_lockfile,
                                     running_on_pi, cntrlr_mock_connect, loop):
-    expected_keys = [
-        'name', 'min_volume', 'max_volume', 'aspirate_flow_rate', 'channels',
-        'dispense_flow_rate', 'pipette_id', 'current_volume', 'display_name']
-
-    hw_api_cntrlr = hc.API.build_hardware_controller(loop=loop)
+    hw_api_cntrlr = await hc.API.build_hardware_controller(loop=loop)
 
     def mock_driver_model(mount):
         attached_pipette = {'left': LEFT_PIPETTE_MODEL, 'right': None}
@@ -66,7 +64,7 @@ async def test_cache_instruments_hc(monkeypatch, dummy_instruments,
 
     assert sorted(
         hw_api_cntrlr.attached_instruments[types.Mount.LEFT].keys()) == \
-        sorted(expected_keys)
+        instrument_keys
 
     # If we pass a conflicting expectation we should get an error
     with pytest.raises(RuntimeError):
@@ -77,14 +75,10 @@ async def test_cache_instruments_hc(monkeypatch, dummy_instruments,
         {types.Mount.LEFT: LEFT_PIPETTE_PREFIX})
     assert sorted(
         hw_api_cntrlr.attached_instruments[types.Mount.LEFT].keys()) == \
-        sorted(expected_keys)
+        instrument_keys
 
 
 async def test_cache_instruments_sim(loop, dummy_instruments):
-    expected_keys = [
-        'name', 'min_volume', 'max_volume', 'aspirate_flow_rate', 'channels',
-        'dispense_flow_rate', 'pipette_id', 'current_volume', 'display_name']
-
     sim = hc.API.build_hardware_simulator(loop=loop)
     # With nothing specified at init or expected, we should have nothing
     await sim.cache_instruments()
@@ -106,7 +100,7 @@ async def test_cache_instruments_sim(loop, dummy_instruments):
     await sim.cache_instruments()
     assert sorted(
         sim.attached_instruments[types.Mount.LEFT].keys()) == \
-        sorted(expected_keys)
+        instrument_keys
     # If we specify conflicting expectations and init arguments we should
     # get a RuntimeError
     with pytest.raises(RuntimeError):
@@ -121,7 +115,7 @@ async def test_aspirate(dummy_instruments, loop):
     aspirate_ul = 3.0
     aspirate_rate = 2
     await hw_api.aspirate(types.Mount.LEFT, aspirate_ul, aspirate_rate)
-    new_plunger_pos = 5.660769
+    new_plunger_pos = 6.05285
     assert hw_api.current_position(types.Mount.LEFT)[Axis.B] == new_plunger_pos
 
 

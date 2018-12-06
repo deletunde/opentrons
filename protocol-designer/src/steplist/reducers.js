@@ -4,6 +4,7 @@ import {handleActions} from 'redux-actions'
 import type {ActionType, Reducer} from 'redux-actions'
 import omit from 'lodash/omit'
 import mapValues from 'lodash/mapValues'
+import reduce from 'lodash/reduce'
 
 import {getPDMetadata} from '../file-types'
 
@@ -23,7 +24,9 @@ import type {
   AddStepAction,
   ChangeFormInputAction,
   DeleteStepAction,
+  ReorderStepsAction,
   ReorderSelectedStepAction,
+  DuplicateStepAction,
   SaveStepFormAction,
   SelectStepAction,
   SelectTerminalItemAction,
@@ -45,6 +48,7 @@ import {
   toggleStepCollapsed,
   type ChangeSavedStepFormAction,
 } from './actions'
+import {getChangeLabwareEffects} from './actions/handleFormChange'
 
 type FormState = FormData | null
 
@@ -125,18 +129,18 @@ const steps: Reducer<StepsState, *> = handleActions({
       }
     }, {...initialStepState})
   },
+  DUPLICATE_STEP: (state: StepsState, action: DuplicateStepAction): StepsState => ({
+    ...state,
+    [action.payload.duplicateStepId]: {
+      ...(action.payload.stepId != null ? state[action.payload.stepId] : {}),
+      id: action.payload.duplicateStepId,
+    },
+  }),
 }, initialStepState)
 
 type SavedStepFormState = {
   [StepIdType]: FormData,
 }
-
-const LABWARE_FIELD_NAMES = [
-  'aspirate_labware',
-  'dispense_blowout_labware',
-  'dispense_labware',
-  'labware',
-]
 
 const savedStepForms: Reducer<SavedStepFormState, *> = handleActions({
   SAVE_STEP_FORM: (state, action: SaveStepFormAction) => ({
@@ -151,44 +155,38 @@ const savedStepForms: Reducer<SavedStepFormState, *> = handleActions({
       ...stepForm,
     }))
   },
-  DELETE_CONTAINER: (state: SavedStepFormState, action: DeleteContainerAction): SavedStepFormState => {
-    const {payload} = action
-    return mapValues(state, savedForm => {
-      let dependentFields = []
-      const withoutDeletedLabware = mapValues(savedForm, (value, fieldName) => {
-        const isLabware = LABWARE_FIELD_NAMES.includes(fieldName)
-        if (isLabware && value === payload.containerId) {
-          switch (fieldName) {
-            case 'aspirate_labware': {
-              dependentFields = [...dependentFields, 'aspirate_wells']
-              break
-            }
-            case 'dispense_labware': {
-              dependentFields = [...dependentFields, 'dispense_wells']
-              break
-            }
-            case 'labware': {
-              dependentFields = [...dependentFields, 'wells']
-              break
-            }
+  DELETE_CONTAINER: (state: SavedStepFormState, action: DeleteContainerAction): SavedStepFormState => (
+    mapValues(state, savedForm => {
+      const deleteLabwareUpdate = reduce(savedForm, (acc, value, fieldName) => {
+        if (value === action.payload.containerId) {
+          const formLabwareFieldUpdate = {[fieldName]: null}
+          return {
+            ...acc,
+            ...formLabwareFieldUpdate,
+            ...getChangeLabwareEffects(formLabwareFieldUpdate),
           }
-          return null
         } else {
-          return value
+          return acc
         }
-      })
-      const withoutDependentFields = mapValues(withoutDeletedLabware, (value, fieldName) => {
-        if (dependentFields.includes(fieldName)) return null
-        return value
-      })
-      return withoutDependentFields
+      }, {})
+      return {
+        ...savedForm,
+        ...deleteLabwareUpdate,
+      }
     })
-  },
+  ),
   CHANGE_SAVED_STEP_FORM: (state: SavedStepFormState, action: ChangeSavedStepFormAction): SavedStepFormState => ({
     ...state,
     [action.payload.stepId]: {
-      ...(action.payload.stepId ? state[action.payload.stepId] : {}),
+      ...(action.payload.stepId != null ? state[action.payload.stepId] : {}),
       ...action.payload.update,
+    },
+  }),
+  DUPLICATE_STEP: (state: SavedStepFormState, action: DuplicateStepAction): SavedStepFormState => ({
+    ...state,
+    [action.payload.duplicateStepId]: {
+      ...(action.payload.stepId != null ? state[action.payload.stepId] : {}),
+      id: action.payload.duplicateStepId,
     },
   }),
 }, {})
@@ -222,11 +220,11 @@ const orderedSteps: Reducer<OrderedStepsState, *> = handleActions({
   ADD_STEP: (state: OrderedStepsState, action: AddStepAction) =>
     [...state, action.payload.id],
   DELETE_STEP: (state: OrderedStepsState, action: DeleteStepAction) =>
-    // TODO Ian 2018-05-10 standardize StepIdType to string, number is implicitly cast to string somewhere
-    state.filter(stepId => !(stepId === action.payload || `${stepId}` === action.payload)),
+    state.filter(stepId => stepId !== action.payload),
   LOAD_FILE: (state: OrderedStepsState, action: LoadFileAction): OrderedStepsState =>
     getPDMetadata(action.payload).orderedSteps,
   REORDER_SELECTED_STEP: (state: OrderedStepsState, action: ReorderSelectedStepAction): OrderedStepsState => {
+    // TODO: BC 2018-11-27 make util function for reordering and use it everywhere
     const {delta, stepId} = action.payload
     const stepsWithoutSelectedStep = state.filter(s => s !== stepId)
     const selectedIndex = state.findIndex(s => s === stepId)
@@ -240,6 +238,19 @@ const orderedSteps: Reducer<OrderedStepsState, *> = handleActions({
       ...stepsWithoutSelectedStep.slice(nextIndex),
     ]
   },
+  DUPLICATE_STEP: (state: OrderedStepsState, action: DuplicateStepAction): OrderedStepsState => {
+    const {stepId, duplicateStepId} = action.payload
+    const selectedIndex = state.findIndex(s => s === stepId)
+
+    return [
+      ...state.slice(0, selectedIndex + 1),
+      duplicateStepId,
+      ...state.slice(selectedIndex + 1, state.length),
+    ]
+  },
+  REORDER_STEPS: (state: OrderedStepsState, action: ReorderStepsAction): OrderedStepsState => (
+    action.payload.stepIds
+  ),
 }, [])
 
 export type SelectableItem = {
@@ -252,7 +263,7 @@ export type SelectableItem = {
 
 type SelectedItemState = ?SelectableItem
 
-function stepIdHelper (id: StepIdType): SelectedItemState {
+function stepIdHelper (id: ?StepIdType): SelectedItemState {
   if (id == null) return null
   return {
     isStep: true,
@@ -260,7 +271,7 @@ function stepIdHelper (id: StepIdType): SelectedItemState {
   }
 }
 
-function terminalItemIdHelper (id: TerminalItemId): SelectedItemState {
+function terminalItemIdHelper (id: ?TerminalItemId): SelectedItemState {
   if (id == null) return null
   return {
     isStep: false,

@@ -6,8 +6,8 @@ import assignId from './assignId'
 import {toWellName, sortWells, splitWellsOnColumn} from '../helpers/index'
 import labwareSchema from '../../labware-json-schema/labware-schema.json'
 import {
-  SLOT_WIDTH_MM as SLOT_LENGTH_MM,
-  SLOT_HEIGHT_MM as SLOT_WIDTH_MM,
+  SLOT_WIDTH_MM,
+  SLOT_LENGTH_MM,
 } from '../constants'
 
 type Metadata = {
@@ -36,6 +36,8 @@ type Params = {
   isTiprack: boolean,
   tipLength?: number,
   loadName?: string,
+  isMagneticModuleCompatible: boolean,
+  magneticModuleEngageHeight?: number,
 }
 
 type Well = {
@@ -205,7 +207,6 @@ function calculateCoordinates (
 // or the labware definition schema in labware-json-schema
 export function createRegularLabware (args: RegularLabwareProps): Schema {
   const ordering = determineOrdering(args.grid)
-  const offset = {...args.offset, z: round(args.dimensions.overallHeight + args.offset.z, 2)}
   const definition: Schema = {
     ordering,
     otId: assignId(),
@@ -217,7 +218,7 @@ export function createRegularLabware (args: RegularLabwareProps): Schema {
       z: 0},
     dimensions: args.dimensions,
     parameters: args.parameters,
-    wells: calculateCoordinates(args.well, ordering, args.spacing, offset),
+    wells: calculateCoordinates(args.well, ordering, args.spacing, args.offset),
   }
   const numWells = args.grid.row * args.grid.column
   const brand = (args.brand && args.brand.brand) || 'generic'
@@ -238,15 +239,10 @@ export function createRegularLabware (args: RegularLabwareProps): Schema {
 // Generator function for labware definitions within an irregular grid format
 // e.g. crystalization plates, 15_50ml tuberacks and anything with multiple "grids"
 export function createIrregularLabware (args: IrregularLabwareProps): Schema {
-  const offset = args.offset.map(offsetObj => ({
-    ...offsetObj,
-    z: round(args.dimensions.overallHeight + offsetObj.z, 2),
-  }))
-
   const wellsArray = determineLayout(
     args.grid,
     args.spacing,
-    offset,
+    args.offset,
     args.gridStart,
     args.well)
 

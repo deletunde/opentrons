@@ -28,7 +28,6 @@ const hardcodedLabware = {
     ['tiprack-200ul', '200uL Tip Rack', 'Tiprack-200ul'],
     ['opentrons-tiprack-300ul', '300µL Tip Rack', 'Tiprack-200ul'],
     ['tiprack-1000ul', '1000µL Tip Rack', 'Tiprack-200ul'],
-    ['tiprack-1000ul-chem', '10x10 1000µL Chem-Tip Rack', 'Tiprack-1000ul-chem'],
   ],
   'Aluminum Block': [
     ['opentrons-aluminum-block-2ml-eppendorf', 'Aluminum Block - 2mL Eppendorf Tubes'],
@@ -37,6 +36,7 @@ const hardcodedLabware = {
     ['opentrons-aluminum-block-PCR-strips-200ul', 'Aluminum Block - 0.2mL PCR Strips'],
   ],
   'Tube Rack': [
+    ['opentrons-tuberack-1.5ml-eppendorf', '1.5mL Tube Rack (4-in-1 Rack)'],
     ['opentrons-tuberack-2ml-eppendorf', '2mL Eppendorf Tube Rack (4-in-1 Rack)'],
     ['opentrons-tuberack-2ml-screwcap', '2mL Screw Cap Tube Rack (4-in-1 Rack)'],
     ['opentrons-tuberack-15ml', '15mL Tube Rack (4-in-1 Rack)'],

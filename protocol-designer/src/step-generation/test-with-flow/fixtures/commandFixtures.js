@@ -1,6 +1,6 @@
 // @flow
 import {tiprackWellNamesFlat} from '../../data'
-import type {Command} from '../../types'
+import type {AspirateDispenseArgs, Command} from '../../types'
 
 export const replaceTipCommands = (tip: number | string): Array<Command> => [
   dropTip('A1'),
@@ -8,14 +8,14 @@ export const replaceTipCommands = (tip: number | string): Array<Command> => [
 ]
 
 export const dropTip = (
-  tip: number | string, // TODO IMMEDIATELY should this be well?: string & default to A1?
+  well: string,
   params?: {| pipette?: string, labware?: string |}
 ): Command => ({
   command: 'drop-tip',
   params: {
     pipette: 'p300SingleId',
     labware: 'trashId',
-    well: (typeof tip === 'string') ? tip : tiprackWellNamesFlat[tip],
+    well: (typeof well === 'string') ? well : tiprackWellNamesFlat[well],
     ...params,
   },
 })
@@ -49,10 +49,7 @@ export const touchTip = (
 export const aspirate = (
   well: string,
   volume: number,
-  params?: {|
-    pipette?: string,
-    labware?: string,
-  |}
+  params?: $Shape<AspirateDispenseArgs>
 ): Command => ({
   command: 'aspirate',
   params: {
@@ -67,10 +64,7 @@ export const aspirate = (
 export const dispense = (
   well: string,
   volume: number,
-  params?: {|
-    pipette?: string,
-    labware?: string,
-  |}
+  params?: $Shape<AspirateDispenseArgs>
 ): Command => ({
   command: 'dispense',
   params: {

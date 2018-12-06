@@ -1,8 +1,10 @@
 // @flow
 import {createSelector} from 'reselect'
+import startCase from 'lodash/startCase'
 import reduce from 'lodash/reduce'
 import get from 'lodash/get'
 import mapValues from 'lodash/mapValues'
+import uniq from 'lodash/uniq'
 import {getAllPipetteNames, getPipetteNameSpecs, getLabware} from '@opentrons/shared-data'
 
 import type {DropdownOption} from '@opentrons/components'
@@ -17,17 +19,17 @@ type Selector<T> = (RootSlice) => T
 
 export const rootSelector = (state: {pipettes: RootState}) => state.pipettes
 
-export const pipettesById: Selector<PipettesById> = createSelector(
+export const getPipettesById: Selector<PipettesById> = createSelector(
   rootSelector,
   pipettes => pipettes.byId
 )
 
-export const pipetteIdsByMount: Selector<*> = createSelector(
+export const getPipetteIdsByMount: Selector<*> = createSelector(
   rootSelector,
   pipettes => pipettes.byMount
 )
 
-export const pipettesByMount: Selector<*> = createSelector(
+export const getPipettesByMount: Selector<*> = createSelector(
   rootSelector,
   pipettes => mapValues(pipettes.byMount, id => pipettes.byId[id])
 )
@@ -48,28 +50,8 @@ function _getPipetteName (pipetteData): string {
   return pipette ? pipette.displayName : '???'
 }
 
-export const equippedPipetteOptions: Selector<Array<DropdownOption>> = createSelector(
-  rootSelector,
-  pipettes => {
-    const byId = pipettes.byId
-
-    const pipetteIds: Array<?string> = [pipettes.byMount.left, pipettes.byMount.right]
-    return pipetteIds.reduce((acc: Array<DropdownOption>, pipetteId: ?string): Array<DropdownOption> =>
-      (pipetteId && byId[pipetteId])
-        ? [
-          ...acc,
-          {
-            name: _getPipetteName(byId[pipetteId]),
-            value: pipetteId,
-          },
-        ]
-        : acc,
-    [])
-  }
-)
-
 // Shows equipped (left & right) pipettes by ID, not mount
-export const equippedPipettes: Selector<PipettesById> = createSelector(
+export const getEquippedPipettes: Selector<PipettesById> = createSelector(
   rootSelector,
   pipettes => reduce(pipettes.byMount, (acc: PipettesById, pipetteId: string): PipettesById => {
     const pipetteData = pipettes.byId[pipetteId]
@@ -81,8 +63,43 @@ export const equippedPipettes: Selector<PipettesById> = createSelector(
   }, {})
 )
 
+export const getEquippedPipetteOptions: Selector<Array<DropdownOption>> = createSelector(
+  getEquippedPipettes,
+  (pipettesById: PipettesById) => {
+    const pipetteIds = Object.keys(pipettesById)
+    const pipetteNamesById = pipetteIds.reduce((acc: {[string]: string}, pipetteId: string) => {
+      const pipetteData = pipettesById[pipetteId]
+      if (!pipetteData) return acc
+      return {
+        ...acc,
+        [pipetteId]: _getPipetteName(pipetteData),
+      }
+    }, {})
+
+    const namesAreAmbiguous = (
+      uniq(Object.values(pipetteNamesById)).length !==
+      Object.values(pipetteNamesById).length)
+
+    return pipetteIds.reduce((acc: Array<DropdownOption>, pipetteId: string): Array<DropdownOption> => {
+      const pipetteData = pipettesById[pipetteId]
+      if (!pipetteData) return acc
+      const pipetteName = pipetteNamesById[pipetteId]
+
+      return [
+        ...acc,
+        {
+          name: (namesAreAmbiguous)
+            ? `${pipetteName} (${startCase(pipetteData.mount)})`
+            : pipetteName,
+          value: pipetteId,
+        },
+      ]
+    }, [])
+  }
+)
+
 // Formats pipette data specifically for edit pipette
-export const pipettesForInstrumentGroup: Selector<*> = createSelector(
+export const getPipettesForInstrumentGroup: Selector<*> = createSelector(
   rootSelector,
   pipettes => [pipettes.byMount.left, pipettes.byMount.right].reduce((acc, pipetteId) => {
     if (!pipetteId) return acc
@@ -106,7 +123,7 @@ export const pipettesForInstrumentGroup: Selector<*> = createSelector(
 )
 
 // Formats pipette data specifically for edit pipette
-export const pipettesForEditPipettes: Selector<Array<FormattedPipette>> = createSelector(
+export const getPipettesForEditPipettes: Selector<Array<FormattedPipette>> = createSelector(
   rootSelector,
   pipettes => [pipettes.byMount.left, pipettes.byMount.right].reduce((acc, pipetteId) => {
     if (!pipetteId) return acc
@@ -129,10 +146,10 @@ export const pipettesForEditPipettes: Selector<Array<FormattedPipette>> = create
   }, [])
 )
 
-export const permittedTipracks: Selector<Array<string>> = createSelector(
-  equippedPipettes,
-  (_equippedPipettes) =>
-    reduce(_equippedPipettes, (acc: Array<string>, pipette: PipetteData) => {
+export const getPermittedTipracks: Selector<Array<string>> = createSelector(
+  getEquippedPipettes,
+  (equippedPipettes) =>
+    reduce(equippedPipettes, (acc: Array<string>, pipette: PipetteData) => {
       return (pipette.tiprackModel)
         ? [...acc, pipette.tiprackModel]
         : acc

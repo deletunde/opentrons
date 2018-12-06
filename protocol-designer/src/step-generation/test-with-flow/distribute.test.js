@@ -1,5 +1,5 @@
 // @flow
-import _distribute from '../distribute'
+import _distribute from '../commandCreators/compound/distribute'
 // import merge from 'lodash/merge'
 import {
   createRobotState,
@@ -39,13 +39,12 @@ beforeEach(() => {
     mixBeforeAspirate: null,
 
     touchTipAfterDispense: false,
-    delayAfterDispense: null,
   }
 
   robotInitialState = createRobotState({
     sourcePlateType: '96-flat',
     destPlateType: '96-flat',
-    tipracks: [200],
+    tipracks: [300],
     fillPipetteTips: true,
     fillTiprackTips: true,
   })
@@ -53,7 +52,7 @@ beforeEach(() => {
   robotInitialStatePipettesLackTips = createRobotState({
     sourcePlateType: '96-flat',
     destPlateType: '96-flat',
-    tipracks: [200],
+    tipracks: [300],
     fillPipetteTips: true,
     fillTiprackTips: false,
   })
@@ -491,9 +490,6 @@ describe('distribute volume exceeds pipette max volume', () => {
       dispense('A2', 50),
 
       // A2 done, move to A3
-      cmd.dropTip('A1'),
-      cmd.pickUpTip('B1'),
-
       cmd.aspirate('A1', 300),
       dispense('A3', 300),
       cmd.aspirate('A1', 50),

@@ -1,7 +1,7 @@
 // @flow
 import type {RobotState} from '../types'
 import {createRobotState, commandCreatorNoErrors} from './fixtures'
-import _dropAllTips from '../dropAllTips'
+import _dropAllTips from '../commandCreators/atomic/dropAllTips'
 
 const dropAllTips = commandCreatorNoErrors(_dropAllTips)
 
@@ -16,7 +16,7 @@ beforeEach(() => {
     destPlateType: '96-flat',
     fillTiprackTips: true,
     fillPipetteTips: false,
-    tipracks: [200, 200],
+    tipracks: [300, 300],
   })
 })
 

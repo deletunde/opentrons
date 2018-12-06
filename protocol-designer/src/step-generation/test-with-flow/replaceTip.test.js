@@ -7,7 +7,7 @@ import {
   commandCreatorNoErrors,
   commandFixtures as cmd,
 } from './fixtures'
-import _replaceTip from '../replaceTip'
+import _replaceTip from '../commandCreators/atomic/replaceTip'
 
 import updateLiquidState from '../dispenseUpdateLiquidState'
 
@@ -33,7 +33,7 @@ describe('replaceTip', () => {
       ...labwareTypes1,
       fillTiprackTips: true,
       fillPipetteTips: false,
-      tipracks: [200, 200],
+      tipracks: [300, 300],
     })
 
     // $FlowFixMe: mock methods
@@ -333,82 +333,6 @@ describe('replaceTip', () => {
           },
         }
       ))
-    })
-  })
-
-  describe('tip assignment', () => {
-    let firstTiprackAssignedState
-    let twoTipracksAssignedState
-
-    beforeEach(() => {
-      firstTiprackAssignedState = {
-        [tiprack1Id]: p300MultiId,
-      }
-
-      twoTipracksAssignedState = {
-        [tiprack1Id]: p300MultiId,
-        [tiprack2Id]: p300MultiId,
-      }
-    })
-
-    test('initial assignment (no tiprackAssignment key)', () => {
-      const result = replaceTip(p300MultiId)(robotInitialState)
-
-      expect(result.robotState.tiprackAssignment).toEqual(firstTiprackAssignedState)
-
-      expect(result.commands[0].params).toEqual({
-        labware: tiprack1Id,
-        pipette: p300MultiId,
-        well: 'A1',
-      })
-    })
-
-    test('use same non-empty tiprack that was already assigned to selected pipette', () => {
-      robotInitialState.tiprackAssignment = {...firstTiprackAssignedState}
-
-      const result = replaceTip(p300MultiId)(robotInitialState)
-
-      expect(result.robotState.tiprackAssignment).toEqual({...firstTiprackAssignedState})
-
-      expect(result.commands[0].params).toEqual({
-        labware: tiprack1Id,
-        pipette: p300MultiId,
-        well: 'A1',
-      })
-    })
-
-    test('get next unassigned tiprack when assigned is empty', () => {
-      // first tiprack was previously assigned to our pipette (p300Multi)
-      robotInitialState.tiprackAssignment = {...firstTiprackAssignedState}
-      // but it's empty
-      robotInitialState.tipState.tipracks[tiprack1Id] = getTiprackTipstate(false)
-
-      const result = replaceTip(p300MultiId)(robotInitialState)
-
-      expect(result.robotState.tiprackAssignment).toEqual({...twoTipracksAssignedState})
-
-      expect(result.commands[0].params).toEqual({
-        labware: tiprack2Id,
-        pipette: p300MultiId,
-        well: 'A1',
-      })
-    })
-
-    test('skip full tiprack when it is assigned to a different pipette', () => {
-      robotInitialState.tiprackAssignment = {...firstTiprackAssignedState}
-
-      const result = replaceTip(p300SingleId)(robotInitialState)
-
-      expect(result.robotState.tiprackAssignment).toEqual({
-        ...firstTiprackAssignedState,
-        [tiprack2Id]: p300SingleId,
-      })
-
-      expect(result.commands[0].params).toEqual({
-        labware: tiprack2Id,
-        pipette: p300SingleId,
-        well: 'A1',
-      })
     })
   })
 })
